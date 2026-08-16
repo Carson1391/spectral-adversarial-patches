@@ -42,19 +42,20 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import cv2
 
-sys.path.insert(0, r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3")
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE, "PyTorch-YOLOv3"))
 import types as _t
 sys.modules["imgaug"] = _t.ModuleType("imgaug")
 from pytorchyolo.models import Darknet
 
-CFG = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\config\yolov3.cfg"
-WTS = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\weights\yolov3.weights"
-IMG_WITH = r"C:\Users\carso\Desktop\YODO\withhuman.png"
-IMG_WITHOUT = r"C:\Users\carso\Desktop\YODO\withouthuman.png"
-POISON_PATCH = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\patch_pipeline\dual_optim\poison\poison_patch.png"
-SUPPRESS_PATCH = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\patch_pipeline\dual_optim\suppress\suppress_patch.png"
-FRACTAL_D4 = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\fractal_patch\fractal_d4_416.png"
-OUT = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\fractal_image_patch"
+CFG = os.path.join(BASE, "PyTorch-YOLOv3", "config", "yolov3.cfg")
+WTS = os.path.join(BASE, "PyTorch-YOLOv3", "weights", "yolov3.weights")
+IMG_WITH = os.path.join(BASE, "withhuman.png")
+IMG_WITHOUT = os.path.join(BASE, "withouthuman.png")
+POISON_PATCH = os.path.join(BASE, "outputs_clothing", "forward_analysis", "patch_pipeline", "dual_optim", "poison", "poison_patch.png")
+SUPPRESS_PATCH = os.path.join(BASE, "outputs_clothing", "forward_analysis", "patch_pipeline", "dual_optim", "suppress", "suppress_patch.png")
+FRACTAL_D4 = os.path.join(BASE, "outputs_clothing", "forward_analysis", "fractal_patch", "fractal_d4_416.png")
+OUT = os.path.join(BASE, "outputs_clothing", "forward_analysis", "fractal_image_patch")
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 IS = 416
 

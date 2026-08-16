@@ -28,7 +28,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3")
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE, "PyTorch-YOLOv3"))
 import types as _t
 sys.modules["imgaug"] = _t.ModuleType("imgaug")
 from pytorchyolo.models import Darknet
@@ -67,13 +68,13 @@ def fwd_all_grad(model, x):
 
 from fractal_image_patch import subdivide_triangle, warp_image_to_triangle
 
-CFG = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\config\yolov3.cfg"
-WTS = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\weights\yolov3.weights"
-IMG_WITH = r"C:\Users\carso\Desktop\YODO\withhuman.png"
-IMG_WITHOUT = r"C:\Users\carso\Desktop\YODO\withouthuman.png"
-POISON = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\patch_pipeline\dual_optim\poison\poison_patch.png"
-SUPPRESS = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\patch_pipeline\dual_optim\suppress\suppress_patch.png"
-OUT = r"C:\Users\carso\Desktop\YODO\outputs_clothing\forward_analysis\deformable_patch_rings"
+CFG = os.path.join(BASE, "PyTorch-YOLOv3", "config", "yolov3.cfg")
+WTS = os.path.join(BASE, "yolov3.weights")
+IMG_WITH = os.path.join(BASE, "withhuman.png")
+IMG_WITHOUT = os.path.join(BASE, "withouthuman.png")
+POISON = os.path.join(BASE, "outputs_clothing", "forward_analysis", "patch_pipeline", "dual_optim", "poison", "poison_patch.png")
+SUPPRESS = os.path.join(BASE, "outputs_clothing", "forward_analysis", "patch_pipeline", "dual_optim", "suppress", "suppress_patch.png")
+OUT = os.path.join(BASE, "outputs_clothing", "forward_analysis", "deformable_patch_rings")
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 IS = 416
 os.makedirs(OUT, exist_ok=True)

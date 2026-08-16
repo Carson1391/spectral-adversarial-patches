@@ -23,7 +23,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-sys.path.insert(0, r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3")
+BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, os.path.join(BASE, "PyTorch-YOLOv3"))
 import types as _t
 sys.modules["imgaug"] = _t.ModuleType("imgaug")
 from pytorchyolo.models import Darknet
@@ -31,10 +32,10 @@ from pytorchyolo.models import Darknet
 # ============================================================
 # Config
 # ============================================================
-CFG = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\config\yolov3.cfg"
-WTS = r"C:\Users\carso\Desktop\YODO\PyTorch-YOLOv3\weights\yolov3.weights"
-IMG_WITH = r"C:\Users\carso\Desktop\YODO\withhuman.png"
-IMG_WITHOUT = r"C:\Users\carso\Desktop\YODO\withouthuman.png"
+CFG = os.path.join(BASE, "PyTorch-YOLOv3", "config", "yolov3.cfg")
+WTS = os.path.join(BASE, "yolov3.weights")
+IMG_WITH = os.path.join(BASE, "withhuman.png")
+IMG_WITHOUT = os.path.join(BASE, "withouthuman.png")
 DEV = "cuda" if torch.cuda.is_available() else "cpu"
 IS = 416
 
@@ -44,7 +45,7 @@ BACKBONE_LAYERS = {"L54": 54, "L62": 62, "L75": 75}
 ALL_LAYERS = {**HEAD_LAYERS, **BACKBONE_LAYERS}
 
 # Output directory
-OUT = r"C:\Users\carso\Desktop\YODO\outputs_clothing\final_boss_v2\metrics"
+OUT = os.path.join(BASE, "outputs_clothing", "final_boss_v2", "metrics")
 os.makedirs(OUT, exist_ok=True)
 
 
