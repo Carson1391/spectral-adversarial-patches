@@ -1,0 +1,299 @@
+{
+  "title": "YOLOv3 Forward-Direction Person Signal Analysis — Comprehensive Summary",
+  "date": "2026-07-03",
+  "model": "YOLOv3 (Darknet-53 backbone, 75 conv layers, COCO 80-class)",
+  "weights": "yolov3.weights",
+  "config": "yolov3.cfg",
+  "input_size": 416,
+  "device": "CUDA",
+  "methodology": {
+    "description": "Paired image comparison: identical scene with human present vs human absent. Forward pass through YOLOv3 capturing all conv layer feature maps. Delta = features(with_human) - features(without_human). This delta IS the person signal inside the network.",
+    "images": {
+      "with_human": "withhuman.png",
+      "without_human": "withouthuman.png"
+    },
+    "no_sipit": true,
+    "no_reconstruction": true,
+    "analyses_performed": [
+      "activation_strength_per_channel",
+      "person_delta_l2_per_channel",
+      "person_delta_relative_per_channel",
+      "spatial_delta_heatmap",
+      "raw_2d_fft_on_feature_maps",
+      "1d_fft_on_flattened_delta",
+      "polynomial_fft_on_channel_embeddings",
+      "gradient_saliency_from_person_detection_score",
+      "frequency_band_analysis_lf_mf_hf"
+    ]
+  },
+  "saliency_results": {
+    "person_score_with_human": 1.0124,
+    "person_score_without_human": 0.0155,
+    "interpretation": "Model strongly detects person (score=1.01) when present, near-zero (0.016) when absent. Saliency maps show which input pixels drive the detection — these are the regions an adversarial patch should target or be near.",
+    "output": "saliency_maps/saliency_with.png, saliency_maps/saliency_without.png"
+  },
+  "layer_rankings": {
+    "most_person_sensitive_by_relative_delta": [
+      {"rank": 1, "layer": 54, "mean_rel_delta": 0.5591, "max_rel_delta": 2.3390, "top_channels": [479, 31, 51, 184, 422]},
+      {"rank": 2, "layer": 75, "mean_rel_delta": 0.5037, "max_rel_delta": 1.7070, "top_channels": [170, 17, 322, 84, 292]},
+      {"rank": 3, "layer": 84, "mean_rel_delta": 0.4535, "max_rel_delta": 1.2910, "top_channels": [167, 234, 32, 211, 157]},
+      {"rank": 4, "layer": 63, "mean_rel_delta": 0.4231, "max_rel_delta": 2.5481, "top_channels": [422, 147, 47, 8, 406]},
+      {"rank": 5, "layer": 60, "mean_rel_delta": 0.4195, "max_rel_delta": 1.5280, "top_channels": [495, 26, 131, 213, 5]}
+    ],
+    "interpretation": "Layer 54 is the single most person-sensitive layer. A 56% relative change means the channel activations change by more than half their baseline magnitude when a person is present. Channels 479, 31, 51 are the most person-tuned individual channels in the network."
+  },
+  "frequency_analysis": {
+    "method": "FFT applied to delta (with-without) feature maps, not raw images and not reconstructions. This measures what frequencies the human signal has AFTER network processing.",
+    "bands_definition": {
+      "low_frequency_LF": "0 to 25% of max radial frequency",
+      "mid_frequency_MF": "25% to 50% of max radial frequency",
+      "high_frequency_HF": "50% to 100% of max radial frequency"
+    },
+    "key_finding": "The human signal undergoes a FREQUENCY CASCADE through the network depth. It is NOT a single frequency — it shifts from LF-dominant at early layers to MF-dominant at deep layers, then back to LF at detection heads.",
+    "cascade_pattern": [
+      {"layers": "0-5 (early, high-res)", "dominant_band": "LF", "lf_range": "0.76-0.96", "interpretation": "Person is a large low-frequency blob at full resolution"},
+      {"layers": "12-37 (mid backbone)", "dominant_band": "LF with rising MF+HF", "lf_range": "0.54-0.65", "interpretation": "Network begins encoding person structure — edges, limbs, boundaries add mid and high frequency content"},
+      {"layers": "54-60 (deep backbone)", "dominant_band": "LF but MF peaks", "lf_range": "0.51-0.58", "mf_range": "0.26-0.28", "interpretation": "Mid-frequency content reaches maximum. Person structure is encoded as medium-scale patterns at 26x26 resolution"},
+      {"layers": "62-75 (deepest, low-res)", "dominant_band": "MF dominant", "lf_range": "0.26-0.34", "mf_range": "0.41-0.43", "hf_range": "0.25-0.34", "interpretation": "At 13x13 feature maps, the person is a high-frequency event relative to the small grid. Most balanced spectrum — broadband disruption needed here"},
+      {"layers": "81-105 (detection heads)", "dominant_band": "LF returns", "lf_range": "0.53-0.94", "interpretation": "Network has made its decision. Person signal collapses to low-frequency yes/no at anchor prediction level"}
+    ],
+    "polynomial_fft": {
+      "method": "Each channel's spatial activation treated as polynomial coefficients. FFT of these coefficients reveals the polynomial degree spectrum of the embedding.",
+      "finding": "Dominant polynomial degrees are at DC (degree 0) and Nyquist (degree N-1), with harmonics at degrees 1, 2, 3. This means the model represents the person as a combination of very low-degree (smooth, global) and very high-degree (rapidly varying, local) polynomial features.",
+      "symmetry_note": "Polynomial FFT appears symmetric because input coefficients are real-valued. For real input X, |X[k]| = |X[N-k]| by conjugate symmetry. Only bins 0 to N/2 carry unique information."
+    },
+    "1d_delta_fft_oscillation": {
+      "cause": "The oscillation in the 1D delta FFT plot is NOT signal oscillation — it is visual redundancy from plotting both halves of a real-valued FFT. Bins 0 to N/2 are unique; bins N/2 to N mirror them.",
+      "top_frequencies": "Dominant 1D frequency is consistently at bin = feature_map_width (one full cycle across the map). The person creates one major spatial event spanning the feature map — the fundamental harmonic."
+    }
+  },
+  "per_layer_data": {
+    "layer_0": {
+      "shape": [32, 416, 416], "mean_delta_l2": 89.22, "max_delta_l2": 246.28,
+      "mean_delta_rel": 0.226, "max_delta_rel": 0.452,
+      "lf": 0.957, "mf": 0.026, "hf": 0.017,
+      "lf_with": 0.9996, "hf_with": 0.00012, "lf_without": 0.9996, "hf_without": 0.00011,
+      "delta_lf": -0.000023, "delta_hf": 0.0000089,
+      "top_person_channels": [29, 5, 15, 21, 1, 27, 13, 19, 18, 6],
+      "top_2d_spectral_channels": [12, 26, 11, 10, 13, 5, 3, 1, 19, 16],
+      "top_1d_freq": 416, "peak_radial_freq": 1,
+      "poly_top_freq_h": [1, 415, 414, 2, 413], "poly_top_freq_w": [0, 414, 413, 1, 412]
+    },
+    "layer_1": {
+      "shape": [64, 208, 208], "mean_delta_l2": 40.68, "max_delta_l2": 89.51,
+      "mean_delta_rel": 0.255, "max_delta_rel": 0.450,
+      "lf": 0.863, "mf": 0.056, "hf": 0.080,
+      "lf_with": 0.9977, "hf_with": 0.00132, "lf_without": 0.9978, "hf_without": 0.00127,
+      "delta_lf": -0.000102, "delta_hf": 0.0000555,
+      "top_person_channels": [51, 25, 38, 22, 4, 54, 9, 52, 53, 60],
+      "top_2d_spectral_channels": [39, 20, 33, 51, 48, 13, 17, 38, 41, 52],
+      "top_1d_freq": 208, "peak_radial_freq": 1,
+      "poly_top_freq_h": [207, 1, 206, 2, 4], "poly_top_freq_w": [206, 0, 205, 1, 2]
+    },
+    "layer_5": {
+      "shape": [128, 104, 104], "mean_delta_l2": 24.66, "max_delta_l2": 43.41,
+      "mean_delta_rel": 0.275, "max_delta_rel": 0.523,
+      "lf": 0.756, "mf": 0.096, "hf": 0.148,
+      "lf_with": 0.9968, "hf_with": 0.00188, "lf_without": 0.9969, "hf_without": 0.00183,
+      "delta_lf": -0.000126, "delta_hf": 0.0000499,
+      "top_person_channels": [42, 127, 94, 27, 105, 118, 97, 114, 24, 50],
+      "top_2d_spectral_channels": [46, 71, 10, 39, 62, 91, 4, 82, 74, 15],
+      "top_1d_freq": 104, "peak_radial_freq": 1,
+      "poly_top_freq_h": [103, 1, 102, 2, 5], "poly_top_freq_w": [102, 0, 101, 1, 2]
+    },
+    "layer_12": {
+      "shape": [256, 52, 52], "mean_delta_l2": 9.71, "max_delta_l2": 20.12,
+      "mean_delta_rel": 0.267, "max_delta_rel": 0.679,
+      "lf": 0.653, "mf": 0.162, "hf": 0.185,
+      "lf_with": 0.9933, "hf_with": 0.00342, "lf_without": 0.9937, "hf_without": 0.00325,
+      "delta_lf": -0.000310, "delta_hf": 0.000171,
+      "top_person_channels": [193, 149, 255, 186, 148, 180, 195, 104, 15, 6],
+      "top_2d_spectral_channels": [7, 44, 185, 19, 107, 226, 3, 250, 61, 129],
+      "top_1d_freq": 52, "peak_radial_freq": 1,
+      "poly_top_freq_h": [51, 1, 50, 2, 5], "poly_top_freq_w": [50, 0, 49, 1, 2]
+    },
+    "layer_37": {
+      "shape": [512, 26, 26], "mean_delta_l2": 4.56, "max_delta_l2": 14.25,
+      "mean_delta_rel": 0.404, "max_delta_rel": 1.942,
+      "lf": 0.538, "mf": 0.213, "hf": 0.249,
+      "lf_with": 0.9511, "hf_with": 0.0251, "lf_without": 0.9538, "hf_without": 0.0237,
+      "delta_lf": -0.00272, "delta_hf": 0.00139,
+      "top_person_channels": [74, 204, 309, 42, 380, 91, 65, 19, 363, 335],
+      "top_2d_spectral_channels": [74, 19, 464, 204, 309, 91, 470, 34, 11, 503],
+      "top_1d_freq": 26, "peak_radial_freq": 1,
+      "poly_top_freq_h": [25, 1, 24, 2, 23], "poly_top_freq_w": [24, 0, 23, 1, 22]
+    },
+    "layer_54": {
+      "shape": [512, 26, 26], "mean_delta_l2": 4.87, "max_delta_l2": 13.77,
+      "mean_delta_rel": 0.559, "max_delta_rel": 2.339,
+      "lf": 0.578, "mf": 0.263, "hf": 0.159,
+      "lf_with": 0.8286, "hf_with": 0.0682, "lf_without": 0.8526, "hf_without": 0.0601,
+      "delta_lf": -0.0241, "delta_hf": 0.00807,
+      "top_person_channels": [479, 31, 51, 184, 422, 119, 510, 399, 331, 108],
+      "top_2d_spectral_channels": [385, 141, 146, 380, 51, 47, 483, 132, 422, 271],
+      "top_1d_freq": 26, "peak_radial_freq": 1,
+      "poly_top_freq_h": [25, 1, 24, 2, 23], "poly_top_freq_w": [24, 0, 23, 1, 22],
+      "notes": "HIGHEST PERSON SENSITIVITY. MF peaks here at 26.3%. Largest HF delta (+0.008). This is the optimal layer to target with adversarial patches."
+    },
+    "layer_60": {
+      "shape": [512, 26, 26], "mean_delta_l2": 4.71, "max_delta_l2": 14.06,
+      "mean_delta_rel": 0.420, "max_delta_rel": 1.528,
+      "lf": 0.509, "mf": 0.283, "hf": 0.207,
+      "lf_with": 0.7533, "hf_with": 0.1068, "lf_without": 0.7642, "hf_without": 0.1031,
+      "delta_lf": -0.0109, "delta_hf": 0.00369,
+      "top_person_channels": [495, 26, 131, 213, 5, 188, 29, 434, 59, 115],
+      "top_2d_spectral_channels": [5, 213, 465, 441, 271, 257, 29, 40, 453, 416],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [25, 1, 24, 2, 23], "poly_top_freq_w": [24, 0, 23, 1, 22],
+      "notes": "Most balanced LF/MF/HF at 26x26 resolution. Near-equal three-band split."
+    },
+    "layer_62": {
+      "shape": [1024, 13, 13], "mean_delta_l2": 1.38, "max_delta_l2": 7.27,
+      "mean_delta_rel": 0.407, "max_delta_rel": 2.323,
+      "lf": 0.256, "mf": 0.408, "hf": 0.336,
+      "lf_with": 0.7431, "hf_with": 0.0949, "lf_without": 0.7411, "hf_without": 0.0944,
+      "delta_lf": 0.00200, "delta_hf": 0.000420,
+      "top_person_channels": [782, 380, 807, 346, 305, 738, 903, 998, 556, 316],
+      "top_2d_spectral_channels": [130, 866, 3, 711, 346, 807, 998, 979, 203, 390],
+      "top_1d_freq": 13, "peak_radial_freq": 1,
+      "poly_top_freq_h": [12, 1, 2, 11, 3], "poly_top_freq_w": [11, 0, 1, 10, 2],
+      "notes": "MF DOMINANT layer. 1024 channels at 13x13. Most broadband person signal. Patch targeting this layer needs LF+MF+HF content."
+    },
+    "layer_63": {
+      "shape": [512, 13, 13], "mean_delta_l2": 1.92, "max_delta_l2": 6.45,
+      "mean_delta_rel": 0.423, "max_delta_rel": 2.548,
+      "lf": 0.256, "mf": 0.427, "hf": 0.317,
+      "lf_with": 0.7199, "hf_with": 0.0960, "lf_without": 0.7273, "hf_without": 0.0931,
+      "delta_lf": -0.00742, "delta_hf": 0.00287,
+      "top_person_channels": [422, 147, 47, 8, 406, 207, 429, 338, 19, 489],
+      "top_2d_spectral_channels": [207, 310, 116, 169, 422, 429, 489, 47, 284, 295],
+      "top_1d_freq": 13, "peak_radial_freq": 1,
+      "poly_top_freq_h": [12, 1, 2, 11, 3], "poly_top_freq_w": [11, 0, 1, 10, 2],
+      "notes": "HIGHEST MAX RELATIVE DELTA in network (2.548). MF dominant. Channel 422 appears in both person-sensitivity and spectral power rankings."
+    },
+    "layer_75": {
+      "shape": [512, 13, 13], "mean_delta_l2": 2.53, "max_delta_l2": 8.22,
+      "mean_delta_rel": 0.504, "max_delta_rel": 1.707,
+      "lf": 0.344, "mf": 0.407, "hf": 0.249,
+      "lf_with": 0.7975, "hf_with": 0.0559, "lf_without": 0.7993, "hf_without": 0.0557,
+      "delta_lf": -0.00177, "delta_hf": 0.000144,
+      "top_person_channels": [170, 17, 322, 84, 292, 152, 40, 311, 47, 315],
+      "top_2d_spectral_channels": [170, 262, 38, 424, 155, 362, 318, 265, 322, 84],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [12, 1, 2, 11, 3], "poly_top_freq_w": [11, 0, 1, 10, 2],
+      "notes": "2nd most person-sensitive. Channel 170 appears here and at detection heads — likely a person-anchor channel."
+    },
+    "layer_81": {
+      "shape": [255, 13, 13], "mean_delta_l2": 9.01, "max_delta_l2": 25.80,
+      "mean_delta_rel": 0.129, "max_delta_rel": 0.734,
+      "lf": 0.662, "mf": 0.288, "hf": 0.049,
+      "lf_with": 0.9957, "hf_with": 0.000456, "lf_without": 0.9955, "hf_without": 0.000455,
+      "delta_lf": 0.000225, "delta_hf": 0.000000729,
+      "top_person_channels": [90, 175, 177, 86, 92, 85, 87, 0, 171, 5],
+      "top_2d_spectral_channels": [90, 175, 29, 109, 35, 5, 102, 148, 92, 93],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [12, 1, 2, 11, 3], "poly_top_freq_w": [11, 0, 1, 10, 2],
+      "notes": "Detection head (13x13 scale). 255 channels = 3 anchors x 85 (5+80 classes). Low relative delta — decision already made."
+    },
+    "layer_84": {
+      "shape": [256, 13, 13], "mean_delta_l2": 3.03, "max_delta_l2": 6.98,
+      "mean_delta_rel": 0.453, "max_delta_rel": 1.291,
+      "lf": 0.532, "mf": 0.338, "hf": 0.130,
+      "lf_with": 0.9109, "hf_with": 0.0159, "lf_without": 0.9163, "hf_without": 0.0144,
+      "delta_lf": -0.00535, "delta_hf": 0.00149,
+      "top_person_channels": [167, 234, 32, 211, 157, 177, 122, 206, 77, 146],
+      "top_2d_spectral_channels": [150, 95, 111, 56, 32, 41, 60, 167, 145, 105],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [12, 1, 2, 11, 3], "poly_top_freq_w": [11, 0, 1, 10, 2]
+    },
+    "layer_92": {
+      "shape": [512, 26, 26], "mean_delta_l2": 7.34, "max_delta_l2": 23.63,
+      "mean_delta_rel": 0.393, "max_delta_rel": 1.428,
+      "lf": 0.815, "mf": 0.140, "hf": 0.045,
+      "lf_with": 0.9857, "hf_with": 0.00377, "lf_without": 0.9867, "hf_without": 0.00338,
+      "delta_lf": -0.00109, "delta_hf": 0.000389,
+      "top_person_channels": [9, 135, 368, 248, 323, 102, 136, 82, 170, 273],
+      "top_2d_spectral_channels": [267, 8, 9, 369, 208, 450, 378, 81, 185, 406],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [25, 1, 24, 2, 23], "poly_top_freq_w": [24, 0, 23, 1, 22]
+    },
+    "layer_93": {
+      "shape": [255, 26, 26], "mean_delta_l2": 20.38, "max_delta_l2": 46.40,
+      "mean_delta_rel": 0.134, "max_delta_rel": 0.686,
+      "lf": 0.829, "mf": 0.141, "hf": 0.030,
+      "lf_with": 0.9991, "hf_with": 0.000156, "lf_without": 0.9993, "hf_without": 0.000138,
+      "delta_lf": -0.000113, "delta_hf": 0.0000179,
+      "top_person_channels": [170, 171, 85, 175, 0, 1, 86, 5, 90, 211],
+      "top_2d_spectral_channels": [174, 41, 126, 211, 175, 39, 127, 4, 124, 42],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [25, 1, 24, 2, 23], "poly_top_freq_w": [24, 0, 23, 1, 22],
+      "notes": "Detection head (26x26 scale). Channels 170, 171 appear as top person channels — these are likely person-class anchor outputs."
+    },
+    "layer_105": {
+      "shape": [255, 52, 52], "mean_delta_l2": 48.37, "max_delta_l2": 83.87,
+      "mean_delta_rel": 0.148, "max_delta_rel": 0.478,
+      "lf": 0.942, "mf": 0.053, "hf": 0.005,
+      "lf_with": 0.9996, "hf_with": 0.0000393, "lf_without": 0.9996, "hf_without": 0.0000383,
+      "delta_lf": 0.00001097, "delta_hf": 0.00000105,
+      "top_person_channels": [170, 171, 86, 0, 1, 85, 88, 177, 14, 90],
+      "top_2d_spectral_channels": [211, 41, 14, 126, 212, 89, 99, 6, 34, 23],
+      "top_1d_freq": 1, "peak_radial_freq": 1,
+      "poly_top_freq_h": [51, 1, 50, 2, 3], "poly_top_freq_w": [49, 1, 50, 0, 2],
+      "notes": "Detection head (52x52 scale). Highest absolute delta but lowest relative. Near-pure LF. Channels 170, 171 again dominant."
+    }
+  },
+  "cross_layer_channels": {
+    "channel_170": {"appears_at_layers": [75, 93, 105], "role": "Person anchor channel — appears across all detection scales as top person-sensitive channel"},
+    "channel_171": {"appears_at_layers": [93, 105], "role": "Person anchor channel at medium and fine scales"},
+    "channel_422": {"appears_at_layers": [54, 63], "role": "Deep person feature — appears in both backbone and detection-adjacent layers"},
+    "channel_47": {"appears_at_layers": [54, 63, 75], "role": "Consistent person feature across deep layers"},
+    "channel_51": {"appears_at_layers": [1, 54], "role": "Appears at both early and deep layers — person edge detector"}
+  },
+  "adversarial_patch_implications": {
+    "primary_target": {
+      "layer": 54,
+      "resolution": "26x26 feature map",
+      "frequency_content_needed": "Mid-frequency dominant (MF=26.3%). Patch should contain medium-scale patterns that map to ~1/4 to 1/2 the feature map Nyquist frequency. At 416px input and 26x26 feature map, each feature cell covers ~16 input pixels. Mid-frequency patterns at this scale correspond to ~8-16 pixel features in the patch.",
+      "channels_to_disrupt": [479, 31, 51, 184, 422],
+      "expected_impact": "56% relative activation change — highest in network"
+    },
+    "secondary_target": {
+      "layer": 63,
+      "resolution": "13x13 feature map",
+      "frequency_content_needed": "Broadband (LF=26%, MF=43%, HF=32%). Patch needs large smooth gradients PLUS medium detail PLUS fine high-frequency content.",
+      "channels_to_disrupt": [422, 147, 47, 8, 406],
+      "expected_impact": "Max single-channel relative delta = 2.548 (highest in network)"
+    },
+    "tertiary_target": {
+      "layer": 75,
+      "resolution": "13x13 feature map",
+      "frequency_content_needed": "MF dominant (41%) with significant HF (25%). Medium-to-fine patterns.",
+      "channels_to_disrupt": [170, 17, 322, 84, 292],
+      "expected_impact": "50% relative delta. Channel 170 is a cross-scale person anchor."
+    },
+    "detection_head_disruption": {
+      "layers": [81, 93, 105],
+      "strategy": "Target channels 170 and 171 which appear consistently across all detection scales. These are likely the person-class anchor output channels. Disrupting them directly attacks the detection decision.",
+      "frequency": "LF dominant — large smooth patches are sufficient at detection heads"
+    },
+    "frequency_cascade_summary": "A patch designed for early layers should be smooth and low-frequency. A patch for mid layers (37-60) should have medium-scale structure. A patch for deep layers (62-75) should be broadband with fine detail. A multi-scale patch that contains all frequency bands will disrupt the person signal at every depth."
+  },
+  "output_files": {
+    "activation_analysis": "outputs_clothing/forward_analysis/activation_maps/ (15 plots)",
+    "person_delta": "outputs_clothing/forward_analysis/person_delta_maps/ (30 plots)",
+    "fft_feature_maps": "outputs_clothing/forward_analysis/fft_feature_maps/ (45 plots)",
+    "saliency": "outputs_clothing/forward_analysis/saliency_maps/ (2 plots)",
+    "cross_layer_summary": "outputs_clothing/forward_analysis/cross_layer_summary.png",
+    "person_signal_json": "outputs_clothing/forward_analysis/person_signal_summary.json",
+    "person_signal_csv": "outputs_clothing/forward_analysis/person_signal_summary.csv",
+    "frequency_deep_plots": "outputs_clothing/forward_analysis/freq_deep/freq_L*.png (15 plots)",
+    "frequency_cross_layer": "outputs_clothing/forward_analysis/freq_deep/freq_cross_layer.png",
+    "frequency_json": "outputs_clothing/forward_analysis/freq_deep/freq_summary.json",
+    "frequency_csv": "outputs_clothing/forward_analysis/freq_deep/freq_summary.csv",
+    "this_summary": "outputs_clothing/forward_analysis/COMPREHENSIVE_SUMMARY.json"
+  },
+  "scripts": {
+    "forward_person_delta": "forward_person_delta.py — activation + delta + FFT + saliency",
+    "frequency_analysis": "freq_analysis.py — delta FFT + polynomial FFT + 2D FFT"
+  }
+}

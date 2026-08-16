@@ -34,12 +34,13 @@ data/
 # PDFs and papers
 *.pdf
 
-# Images (except source assets)
+# Images (except results/ figures)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.bmp
+!results/**/*.png
 
 # Temp / debug
 debug_*.png
