@@ -1,0 +1,30 @@
+# Archetype Patch
+
+## Purpose
+Printable wearable patch that turns the wearer into the surrogate model's
+internal archetype of COCO class 0 ("person"). Deployed against an
+inaccessible edge-YOLOv3 (fine-tuned pico3) via black-box transfer.
+
+## Strategy
+- Surrogate: yolov3u.pt (Darknet-53 backbone, shared lineage with target).
+- Activation maximization on person-class logit through frozen surrogate.
+- Initialization: 4 nested equilateral triangles covering scales 1x/2x/4x/8x
+  for native distance robustness.
+- EOT resize augmentations during optimization simulate viewer distance.
+- TV + loose NPS regularizers preserve printability.
+
+## Threat Model
+- Attacker has NO access to target model weights/gradients.
+- Attacker HAS access to a structurally related surrogate.
+- Transfer tax accepted (estimated 40-60% effectiveness vs white-box).
+
+## Success Criterion
+- Generated patch produces >=1 confident person-class detection when
+  photographed at 3-10m by a YOLOv3-family detector.
+- Survives NMS as a persistent phantom detection.
+- Print-rendered output retains activity (measured by re-digitizing photo).
+
+## Out of Scope (v1)
+- Direct white-box optimization against the deployed pico3.
+- Re-ID embedding corruption (deferred to v2).
+- Tracker confusion metrics (deferred to v2).

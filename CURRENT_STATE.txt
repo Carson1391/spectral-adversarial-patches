@@ -1,0 +1,29 @@
+# Current State
+
+Status: IMPLEMENTED, AWAITING USER TRAINING RUN
+
+## Works Now
+- Triangle seed renderer (nested 4-scale equilateral).
+- Frozen YOLOv3-u loader with person-logit extraction.
+- EOT resize-augmentation bank (distance simulation).
+- Adam optimizer on input pixels with TV+NPS regularization.
+- Snapshot dumping every 50 iters.
+- Final PNG + tensor NPZ + config JSON exports.
+
+## Verified
+- Static review of tensor shapes and control flow.
+- Imports audit clean.
+- Syntax-checked manually.
+
+## Needs User Execution
+- `pip install -r requirements.txt`
+- `python -m src.archetype smoke` (sanity)
+- `python -m src.archetype train` (full run, ~600 iters)
+
+## Blockers
+None. Requires CUDA ideally; CPU fallback works slowly.
+
+## Next Milestone
+Inspect `runs/archetype_v1/archetype_final.png`. Does it trigger
+person detections when fed back through YOLOv3? If yes, print test.
+If marginal, bump iters to 1200 and retry.

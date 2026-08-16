@@ -1,0 +1,73 @@
+# Model weights (huge files)
+*.weights
+*.pt
+*.pth
+*.onnx
+*.bin
+*.safetensors
+
+# Output directories
+outputs_*/
+outputs_clothing/
+runs/
+embeddings_capture/
+fft_analysis_*/
+fft_2d_analysis/
+fft_2d_analysis_*/
+loss_compare/
+eval_suite/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE / assistant
+.windsurf/
+.agents/
+.codex/
+.agent/
+
+# Data (personal images)
+data/
+
+# PDFs and papers
+*.pdf
+
+# Images (except source assets)
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+
+# Temp / debug
+debug_*.png
+*.log
+proof.png
+
+# TensorBoard
+runs/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Submodules (if not needed)
+AdvReal/
+PyTorch-YOLOv3/
+YOLOv3/
+YOLOv8/
+YOLO11/
+YOLO26/
+T-SEA/
+adversarial-robustness-toolbox/
+
+# Misc generated
+layer_dims.json
+layer_dims.csv
+darknet_layer_dims.csv
+objectness_dims.json
+activation_channels.txt
+activation_probe.log
+openmemory.md

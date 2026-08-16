@@ -1,0 +1,203 @@
+Below is the exact technical breakdown for optimizing physical patches against a YOLOv3 edge inference pipeline, split into the two distinct objective paths: Suppression (evasion) and Poison (injection/corruption). Each path targets different YOLOv3 architectural components, post-processing layers, and downstream cloud ingestion points.
+
+YOLOv3 Edge Pipeline Baseline
+Backbone: Darknet-53 (residual blocks, 5× downsampling)
+Detection Heads: 3 scales (13×13, 26×26, 52×52) × 3 anchors = 9 predictions per spatial location
+Activation: Sigmoid for objectness ($p{obj}$) and class probabilities ($p{cls}$). No softmax.
+Box Regression: MSE on offset predictions ($tx, ty, tw, th$) with exponential/sigmoid transforms
+Post-Processing: Confidence thresholding ($\tau{conf} \approx 0.25–0.40$), NMS with IoU threshold ($\tau{nms} \approx 0.45$)
+Edge Deployment: INT8 PTQ via TensorRT/Hexagon DSP, running on QCS605/605 at <10W TDP
+Cloud Handoff: Cropped ROIs from surviving detections → embedding extraction → FAISS indexing / training loop
+
+Path 1: Suppression (Evasion / Invisibility)
+Objective: Drive $p{obj} \cdot p{cls}$ below $\tau{conf}$ across all 3 scales and 9 anchors, preventing crop extraction and cloud ingestion.
+
+Optimization Target
+$$
+\mathcal{L}{supp} = \lambda{obj} \sum{s,a} \max\left(0, \sigma(o{s,a}) \cdot \sigma(c{s,a}^{target}) - \tau{conf}\right)^2 + \lambda{box} \|\Delta b{s,a}\|2^2
+$$
+Where:
+$s \in \{13,26,52\}$, $a \in \{1..9\}$
+$\sigma(\cdot)$: Sigmoid activation
+$o{s,a}$: Raw objectness logit
+$c{s,a}^{target}$: Raw class logit for target category
+$\Delta b{s,a}$: Box offset perturbation (prevents anchor alignment)
+
+YOLOv3-Specific Constraints
+| Layer | Vulnerability | Optimization Requirement |
+|---|---|---|
+| Multi-scale FPN | Objects detected at 3 resolutions | Must suppress across all 3 feature maps simultaneously |
+| Fixed Anchors | COCO-trained priors | Perturb must avoid IoU $> 0.3$ with any anchor box |
+| Sigmoid Objectness | Independent per-anchor | Push raw logits $o{s,a} < -2.0$ to force $p{obj} < 0.12$ |
+| NMS | Suppresses high-IoU duplicates | Irrelevant if $p{obj} < \tau{conf}$; no crop generated |
+
+Quantization-Aware Formulation
+Edge runs INT8 PTQ. Optimization must simulate grid alignment:
+
+Success Metrics
+ASR (Attack Success Rate): $>92\%$ at 5–15m physical range
+False Suppression Rate: $<3\%$ on non-target classes
+Quantization Drift Tolerance: $\Delta \theta < 0.04$ rad post-INT8 dequantization
+EoT Robustness: Survives H.265 DCT, motion blur ($\sigma{blur} \in [0.5, 1.5]$), ISP noise
+
+Path 2: Poison (Injection / Manifold Corruption)
+Objective: Force YOLOv3 to output a high-confidence false detection, control crop coordinates, and inject adversarial patterns into the cloud embedding/training pipeline.
+
+Optimization Target
+$$
+\mathcal{L}{poison} = -\lambda{obj} \sum{s,a} \sigma(o{s,a}) \cdot \sigma(c{s,a}^{fake}) + \lambda{box} \|b{s,a} - b{target}\|2^2 + \lambda{nms} \max\left(0, \text{IoU}(b{s,a}, b{real}) - \tau{nms}\right)^2
+$$
+Where:
+$c{s,a}^{fake}$: Target false class (e.g., vehicle → pedestrian, or empty → vehicle)
+$b{target}$: Desired crop bounding box (controls downstream ROI)
+$\tau{nms} = 0.45$: Must stay below to survive NMS alongside real detections
+
+YOLOv3-Specific Constraints
+| Layer | Vulnerability | Optimization Requirement |
+|---|---|---|
+| Anchor Alignment | Fixed priors maximize IoU | Align patch geometry with target anchor scale (e.g., 26×26 for medium) |
+| Confidence Threshold | $\tau{conf} \approx 0.25–0.40$ | Force $p{obj} > 0.65$, $p{cls} > 0.70$ |
+| NMS Survival | IoU-based suppression | Keep IoU with real objects $< 0.40$ |
+| Crop Extraction | Cloud ingests ROI from surviving box | Control $b{s,a}$ to inject poison pattern into exact crop region |
+
+Downstream Cloud Impact Mapping
+The poisoned crop feeds directly into cloud pipelines:
+ReID Embedding: Adversarial texture shifts cosine similarity $\Delta \cos > 0.15$
+Trajectory Graph: False detection creates phantom node in ST-GNN
+Training Loop: Poisoned ROI enters contrastive/masked pretraining, warping manifold curvature
+
+Quantization-Aware Formulation
+
+Success Metrics
+False Positive Rate: $>85\%$ on target class
+NMS Survival Rate: $>90\%$ in mixed traffic scenes
+Crop Control Error: $\|\Delta b\| < 4$ px (ensures poison lands in ROI)
+Cloud Embedding Drift: $\Delta \cos > 0.15$ rad or FAISS cluster shift $> 0.12$ rad
+Training Contamination: $>10\%$ poisoned samples in micro-batch triggers gradient divergence
+
+Pipeline Interaction Summary
+| Path | Edge YOLOv3 Behavior | Cloud Handoff | Downstream Impact |
+|---|---|---|---|
+| Suppression | $p{obj} \cdot p{cls} < \tau{conf}$ → no detection | Zero crop → no embedding → no indexing | Removes target from trajectory graph, breaks continuity |
+| Poison | $p{obj} > 0.65$, $p{cls} > 0.70$, IoU $< 0.40$ → survives NMS | Cropped ROI → poisoned embedding → FAISS/training ingestion | Phantom node creation, manifold warping, contrastive loss degradation |
+
+Hard Optimization Targets (Physical Deployment)
+| Parameter | Suppression | Poison |
+|---|---|---|
+| Confidence Threshold | $< 0.12$ | $> 0.65$ |
+| Anchor IoU | $< 0.30$ | $> 0.55$ (target anchor) |
+| NMS IoU | Irrelevant | $< 0.40$ |
+| Quantization Drift | $\Delta \theta < 0.04$ rad | $\Delta \theta < 0.05$ rad |
+| Physical ASR | $>92\%$ | $>85\%$ |
+| EoT Robustness | H.265 DCT, blur, ISP noise | Same + crop alignment tolerance $\pm 4$px |
+
+Execution Protocol
+Extract Edge Config: Pull yolov3.cfg, INT8 calibration table, and NMS/confidence thresholds from target node.
+Simulate Pipeline: Wrap YOLOv3 in PyTorch → TensorRT → INT8 quantization → crop extraction.
+Optimize Patch: Run EoT + quantization-aware loss with Adam/L-BFGS. Freeze background, optimize only patch region.
+Physical Validation: Print on matte vinyl, test under varying lighting/motion. Measure ASR, false rates, and cloud drift.
+Deploy: Align with pipeline objective. Suppression removes telemetry. Poison corrupts it.
+
+The two paths are mathematically orthogonal. Suppression targets objectness/class logits across all scales. Poison targets anchor alignment, confidence maximization, NMS survival, and crop control. Both require quantization-aware optimization and EoT robustness. Choose based on pipeline impact: removal vs. corruption.
+
+
+
+Phase 1: Digital Simulation & Validation
+Before physical deployment, the patch must survive a full pipeline mock that mirrors the target edge node and cloud ingestion stack.
+
+Pipeline Mirroring
+Wrap the target YOLOv3 weights in PyTorch, then export to ONNX → TensorRT.
+Apply exact INT8 PTQ calibration tables from the target QCS605/605 SoC.
+Simulate post-processing: confidence thresholding ($\tau{conf}$), NMS ($\tau{nms}$), ROI cropping, and cloud embedding extraction.
+
+Expectation over Transformation (EoT) Augmentation
+Optimize the patch against a stochastic transformation distribution $\mathcal{T}$:
+$$
+\mathcal{L}{EoT} = \mathbb{E}{t \sim \mathcal{T}} \left[ \mathcal{L}{task}(f\theta(t(x \odot M + p))) \right]
+$$
+Where $\mathcal{T}$ includes:
+Affine transforms: rotation $\pm 15^\circ$, scale $[0.8, 1.2]$, translation $\pm 10\%$
+Optical degradation: Gaussian motion blur $\sigma \in [0.5, 2.0]$, defocus $\sigma \in [0.3, 1.0]$
+ISP simulation: shot noise, read noise, H.265 DCT quantization, exposure shifts ($\pm 1.5$ EV)
+Color space mapping: sRGB → YUV420 → sRGB round-trip
+
+Quantization-Aware Optimization
+Simulate INT8 grid alignment during backprop:
+
+Digital Go/No-Go Gates
+| Metric | Suppression | Poison |
+|---|---|---|
+| ASR (digital) | $>94\%$ | $>88\%$ |
+| False rate | $<3\%$ | $<5\%$ |
+| Quantization drift | $\Delta \theta < 0.04$ rad | $\Delta \theta < 0.05$ rad |
+| NMS survival | N/A | $>90\%$ |
+| Crop alignment error | N/A | $<4$ px |
+
+Phase 2: Physical Prototyping & Field Testing
+Digital success does not guarantee physical viability. The gap is dominated by sensor ISP pipelines, lens distortion, print gamut limits, and environmental variability.
+
+Material & Print Specifications
+Substrate: Matte vinyl or rigid PVC. Glossy finishes cause specular highlights that break EoT assumptions.
+Ink: UV-resistant, high-contrast CMYK + spot black. Avoid metallic or reflective pigments.
+Resolution: Print at $\geq 300$ DPI. Verify color gamut matches sRGB optimization space using a spectrophotometer.
+Mounting: Rigid backing to prevent warping. Weatherproof lamination only if it does not alter reflectance.
+
+Controlled Test Rig
+Camera: Exact sensor/lens model as the target edge node. Same firmware, ISP profile, and exposure settings.
+Target motion: Linear rail or vehicle-mounted rig at controlled speeds ($5–45$ km/h).
+Lighting: Programmable LED array simulating dawn ($4000$K), noon ($6500$K), dusk ($3000$K), and streetlamp ($2200$K).
+Capture: RAW + processed YUV streams. Log exposure time, ISO, white balance, and lens distortion coefficients.
+
+Field Validation Protocol
+Deploy at fixed distances: $5$m, $10$m, $15$m.
+Vary angles: $\pm 10^\circ$, $\pm 20^\circ$, $\pm 30^\circ$ yaw/pitch.
+Record $>500$ frames per condition. Run through actual edge firmware → TensorRT → cloud mock.
+Extract metrics: physical ASR, frame retention rate, embedding drift, NMS survival, false positive/negative rates.
+
+Environmental & Real-World Simulation
+Physical testing must replicate operational conditions to avoid lab-to-field degradation. Introduce controlled stressors:
+Rain/fog simulation (droplet scattering, reduced contrast)
+Vibration/jitter (mount instability, motion blur amplification)
+Temperature shifts ($-10^\circ$C to $40^\circ$C) affecting sensor noise and ISP gain
+
+Phase 3: Closing the Digital → Physical Gap
+The digital→physical gap is deterministic. Close it via iterative calibration:
+
+ISP & Sensor Profiling
+Capture flat-field and dark frames from the target camera.
+Extract noise profile $\sigma{read}, \sigma{shot}$, lens distortion $k1, k2, p1, p2$, and color correction matrix (CCM).
+Inject these into the digital EoT pipeline before re-optimization.
+
+Print Gamut Mapping
+Print a color calibration chart. Measure $\Delta E$ across the patch region.
+Build a forward model $G{print}(p{digital}) \rightarrow p{physical}$.
+Optimize in physical color space, then back-project to digital for printing.
+
+Iterative Refinement Loop
+
+Freeze background, optimize only patch region.
+Use L-BFGS or Adam with learning rate decay.
+Stop when physical ASR stabilizes within $\pm 2\%$ across 3 consecutive print-test cycles.
+
+Hard Thresholds & Go/No-Go Gates
+| Stage | Metric | Suppression | Poison |
+|---|---|---|---|
+| Digital | ASR | $>94\%$ | $>88\%$ |
+| Digital | Quantization drift | $<0.04$ rad | $<0.05$ rad |
+| Physical | ASR (5–15m) | $>90\%$ | $>82\%$ |
+| Physical | False rate | $<4\%$ | $<6\%$ |
+| Physical | Embedding drift | N/A | $\Delta \cos > 0.15$ rad |
+| Physical | NMS survival | N/A | $>85\%$ |
+| Pipeline | Cloud ingestion impact | $0$ crops | $>80\%$ poison retention |
+
+Execution Protocol
+Extract Target Config: Pull yolov3.cfg, INT8 calibration table, NMS/conf thresholds, camera ISP profile.
+Build Digital Mock: PyTorch → TensorRT → INT8 PTQ → ROI crop → embedding mock.
+Run EoT Optimization: Apply stochastic transforms, quantization simulation, and task-specific loss.
+Validate Digitally: Hit Go/No-Go gates. If failed, adjust $\lambda$ weights or EoT distribution.
+Print & Mount: Matte vinyl, UV ink, rigid backing. Verify color gamut match.
+Field Test: Controlled rig → variable lighting/distance/angle → capture RAW+YUV → run through actual edge firmware.
+Calibrate & Iterate: Profile ISP/print degradation, inject into digital pipeline, re-optimize.
+Deploy: Only when physical ASR and pipeline impact stabilize across 3 consecutive cycles.
+
+Digital simulation filters out structurally weak patches. Physical validation exposes ISP, optical, and environmental failure modes. Iterative calibration closes the gap. The pipeline is deterministic. Execute within bounds.
